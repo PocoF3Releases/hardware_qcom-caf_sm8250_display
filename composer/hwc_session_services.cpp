@@ -45,9 +45,24 @@ namespace sdm {
 void HWCSession::StartServices() {
   int error = DisplayConfig::DeviceInterface::RegisterDevice(this);
   if (error) {
-    DLOGW("Could not register IDisplayConfig as service (%d).", error);
+    DLOGW("Could not register IDisplayConfig 2.0 as service (%d).", error);
   } else {
-    DLOGI("IDisplayConfig service registration completed.");
+    DLOGI("IDisplayConfig 2.0 service registration completed.");
+  }
+
+  legacy_display_config_ = new LegacyDisplayConfig(this);
+  if (!legacy_display_config_->IsReady()) {
+    DLOGW("Could not initialize IDisplayConfig 1.9 compatibility service.");
+    legacy_display_config_.clear();
+    return;
+  }
+
+  android::status_t status = legacy_display_config_->registerAsService();
+  if (status != android::OK) {
+    DLOGW("Could not register IDisplayConfig 1.9 compatibility service (%d).", status);
+    legacy_display_config_.clear();
+  } else {
+    DLOGI("IDisplayConfig 1.9 compatibility service registration completed.");
   }
 }
 
