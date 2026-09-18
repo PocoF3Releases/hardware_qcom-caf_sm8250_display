@@ -1281,9 +1281,23 @@ int GetBufferLayout(private_handle_t *hnd, uint32_t stride[4], uint32_t offset[4
 int GetGpuResourceSizeAndDimensions(const BufferInfo &info, unsigned int *size,
                                     unsigned int *alignedw, unsigned int *alignedh,
                                     GraphicsMetadata *graphics_metadata) {
-  GetAlignedWidthAndHeight(info, alignedw, alignedh);
   AdrenoMemInfo* adreno_mem_info = AdrenoMemInfo::GetInstance();
+  if (!adreno_mem_info->IsGpuPixelFormatSupported(info.format)) {
+    // Capability probes for newer formats are expected on legacy drivers.
+    // Reject before alignment/layout calls, not as a metadata initialization fault.
+    *size = 0;
+    *alignedw = 0;
+    *alignedh = 0;
+    graphics_metadata->size = 0;
+    return -ENOTSUP;
+  }
+  GetAlignedWidthAndHeight(info, alignedw, alignedh);
   graphics_metadata->size = adreno_mem_info->AdrenoGetMetadataBlobSize();
+  if (graphics_metadata->size == 0 ||
+      graphics_metadata->size > sizeof(graphics_metadata->data)) {
+    *size = 0;
+    return -EINVAL;
+  }
   uint64_t adreno_usage = info.usage;
   // If gralloc disables UBWC based on any of the checks,
   // we pass modified usage flag to adreno to convey this.
@@ -1308,7 +1322,7 @@ int GetGpuResourceSizeAndDimensions(const BufferInfo &info, unsigned int *size,
   }
   // Call adreno api with the metadata blob to get buffer size
   *size = adreno_mem_info->AdrenoGetAlignedGpuBufferSize(graphics_metadata->data);
-  return 0;
+  return *size ? 0 : -EINVAL;
 }
 
 bool CanUseAdrenoForSize(int buffer_type, uint64_t usage) {

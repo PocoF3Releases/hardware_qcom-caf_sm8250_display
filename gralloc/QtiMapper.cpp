@@ -280,11 +280,9 @@ Return<void> QtiMapper::isSupported(const BufferDescriptorInfo_3_0 &descriptor_i
 
   buffer_handle_t buffer;
   err = static_cast<IMapper_3_0_Error>(buf_mgr_->AllocateBuffer(desc, &buffer, 0, true));
-  if (err != Error::NONE) {
-    hidl_cb(err, false);
-  } else {
-    hidl_cb(err, true);
-  }
+  // Descriptor validation errors were handled above. This is a dry run:
+  // an unsupported layout is a negative capability result, not an RPC error.
+  hidl_cb(Error::NONE, err == Error::NONE);
 
   return Void();
 }
