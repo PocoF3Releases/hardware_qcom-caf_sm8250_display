@@ -84,6 +84,7 @@
 #include "hwc_display_event_handler.h"
 #include "hwc_buffer_sync_handler.h"
 #include "hwc_display_virtual_factory.h"
+#include "legacy_display_config.h"
 
 using ::android::hardware::Return;
 using ::android::hardware::hidl_string;
@@ -611,6 +612,7 @@ class HWCSession : hwc2_device_t, HWCUEventListener, public qClient::BnQClient,
   std::bitset<HWCCallbacks::kNumDisplays> display_ready_;
   bool secure_session_active_ = false;
   bool is_idle_time_up_ = false;
+  sp<LegacyDisplayConfig> legacy_display_config_;
 };
 }  // namespace sdm
 
