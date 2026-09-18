@@ -1061,7 +1061,7 @@ Error BufferManager::AllocateBuffer(const BufferDescriptor &descriptor, buffer_h
   std::lock_guard<std::mutex> buffer_lock(buffer_lock_);
 
   uint64_t reserved_size = descriptor.GetReservedSize();
-  if (reserved_size + sizeof(MetaData_t) + getpagesize() >= UINT32_MAX) {
+  if (reserved_size >= UINT32_MAX - sizeof(MetaData_t) - getpagesize()) {
     return Error::UNSUPPORTED;
   }
 
@@ -1080,6 +1080,13 @@ Error BufferManager::AllocateBuffer(const BufferDescriptor &descriptor, buffer_h
 
   GraphicsMetadata graphics_metadata = {};
   err = GetBufferSizeAndDimensions(info, &size, &alignedw, &alignedh, &graphics_metadata);
+  if (err == -ENOTSUP) {
+    if (!testAlloc) {
+      ALOGE("%s: Unsupported GPU format 0x%x for allocation %dx%d usage %" PRIu64,
+            __FUNCTION__, format, info.width, info.height, usage);
+    }
+    return Error::UNSUPPORTED;
+  }
   if (err < 0) {
     return Error::BAD_DESCRIPTOR;
   }
@@ -1117,6 +1124,7 @@ Error BufferManager::AllocateBuffer(const BufferDescriptor &descriptor, buffer_h
   err = allocator_->AllocateMem(&e_data, 0, 0);
   if (err) {
     ALOGE("gralloc failed to allocate metadata error=%s", strerror(-err));
+    allocator_->FreeBuffer(nullptr, data.size, 0, data.fd, data.ion_handle);
     return Error::NO_RESOURCES;
   }
 
@@ -1150,6 +1158,9 @@ Error BufferManager::AllocateBuffer(const BufferDescriptor &descriptor, buffer_h
 
   if (error != 0) {
     ALOGE("validateAndMap failed");
+    allocator_->FreeBuffer(nullptr, data.size, 0, data.fd, data.ion_handle);
+    allocator_->FreeBuffer(nullptr, e_data.size, 0, e_data.fd, e_data.ion_handle);
+    delete hnd;
     return Error::BAD_BUFFER;
   }
   auto metadata = reinterpret_cast<MetaData_t *>(hnd->base_metadata);

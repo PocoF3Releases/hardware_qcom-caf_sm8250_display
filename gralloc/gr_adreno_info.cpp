@@ -30,6 +30,7 @@
 #include <log/log.h>
 #include <cutils/properties.h>
 #include <dlfcn.h>
+#include <limits>
 #include <mutex>
 
 #include "gr_adreno_info.h"
@@ -181,7 +182,7 @@ uint32_t AdrenoMemInfo::GetGpuPixelAlignment() {
   return 1;
 }
 
-ADRENOPIXELFORMAT AdrenoMemInfo::GetGpuPixelFormat(int hal_format) {
+static ADRENOPIXELFORMAT LookupGpuPixelFormat(int hal_format) {
   switch (hal_format) {
     case HAL_PIXEL_FORMAT_RGBA_8888:
       return ADRENO_PIXELFORMAT_R8G8B8A8;
@@ -287,11 +288,23 @@ ADRENOPIXELFORMAT AdrenoMemInfo::GetGpuPixelFormat(int hal_format) {
     case HAL_PIXEL_FORMAT_COMPRESSED_SRGB8_ALPHA8_ASTC_12x12_KHR:
       return ADRENO_PIXELFORMAT_ASTC_12X12_SRGB;
     default:
-      ALOGE("%s: No map for format: 0x%x", __FUNCTION__, hal_format);
       break;
   }
 
   return ADRENO_PIXELFORMAT_UNKNOWN;
+}
+
+ADRENOPIXELFORMAT AdrenoMemInfo::GetGpuPixelFormat(int hal_format) {
+  const auto gpu_format = LookupGpuPixelFormat(hal_format);
+  if (gpu_format == ADRENO_PIXELFORMAT_UNKNOWN) {
+    ALOGE("%s: No map for format: 0x%x", __FUNCTION__, hal_format);
+  }
+  return gpu_format;
+}
+
+bool AdrenoMemInfo::IsGpuPixelFormatSupported(int hal_format) {
+  // A format lookup alone does not guarantee that a complete layout is supported.
+  return LookupGpuPixelFormat(hal_format) != ADRENO_PIXELFORMAT_UNKNOWN;
 }
 
 uint32_t AdrenoMemInfo::AdrenoGetMetadataBlobSize() {
@@ -304,9 +317,13 @@ uint32_t AdrenoMemInfo::AdrenoGetMetadataBlobSize() {
 int AdrenoMemInfo::AdrenoInitMemoryLayout(void *metadata_blob, int width, int height, int depth,
   int format, int num_samples, int isUBWC, uint64_t usage, uint32_t num_planes) {
   if (LINK_adreno_init_memory_layout) {
+    const auto gpu_format = GetGpuPixelFormat(format);
+    if (gpu_format == ADRENO_PIXELFORMAT_UNKNOWN) {
+      return -1;
+    }
     surface_tile_mode_t tile_mode = static_cast<surface_tile_mode_t> (isUBWC);
     return LINK_adreno_init_memory_layout(metadata_blob, width, height, depth,
-                                          GetGpuPixelFormat(format), num_samples,
+                                          gpu_format, num_samples,
                                           tile_mode, usage, num_planes);
   }
   return -1;
@@ -315,9 +332,14 @@ int AdrenoMemInfo::AdrenoInitMemoryLayout(void *metadata_blob, int width, int he
 uint32_t AdrenoMemInfo::AdrenoGetAlignedGpuBufferSize(void *metadata_blob) {
   if (LINK_adreno_get_aligned_gpu_buffer_size) {
     uint64_t size = LINK_adreno_get_aligned_gpu_buffer_size(metadata_blob);
+    // The gralloc handle and allocation interfaces carry a 32-bit byte size.
+    // Never truncate a larger GPU layout into an undersized allocation.
+    if (size > std::numeric_limits<uint32_t>::max()) {
+      return 0;
+    }
     return static_cast<uint32_t>(size);
   }
-  return -1;
+  return 0;
 }
 
 bool AdrenoMemInfo::AdrenoSizeAPIAvaliable() {
