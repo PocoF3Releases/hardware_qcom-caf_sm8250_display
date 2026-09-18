@@ -175,6 +175,8 @@ class AdrenoMemInfo {
    * Function to get the corresponding Adreno format for given HAL format
    */
   ADRENOPIXELFORMAT GetGpuPixelFormat(int hal_format);
+  // Quiet preflight for capability queries; does not validate dimensions or usage.
+  bool IsGpuPixelFormatSupported(int hal_format);
 
   /*
    * Function to get graphics metadata blob size
